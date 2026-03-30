@@ -5,7 +5,13 @@ import { useContext } from 'react'
 const Home = () => {
     const {user} = useContext(UserContext)
   return (
-    <div>{JSON.stringify(user)}</div>
+    <main className='p-4'>
+      <div className="projects">
+        <div className="project">
+          
+        </div>
+      </div>
+    </main>
   )
 }
 
