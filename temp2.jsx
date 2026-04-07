@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useContext, useRef } from 'react'
-import { UserContext } from '../context/user.context'
+import React, { useState, useContext, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import axios from '../config/axios'
-import { initializeSocket, receiveMessage, sendMessage } from '../config/socket'
-import Markdown from 'markdown-to-jsx'
+import axios from '../config/axios';
+import { initializeSocket, receiveMessage, sendMessage} from '../config/socket';
+import { UserContext } from '../context/user.context';
 import hljs from 'highlight.js';
-import { getWebContainer } from '../config/webcontainer'
-
+import Markdown from 'markdown-to-jsx';
+import { getWebContainer } from '../config/webContainer';
 
 function SyntaxHighlightedCode(props) {
     const ref = useRef(null)
@@ -23,31 +22,28 @@ function SyntaxHighlightedCode(props) {
     return <code {...props} ref={ref} />
 }
 
-
-const Project = () => {
-
-    const location = useLocation()
+const Project = ({navigate}) => {
+    const location  = useLocation();
 
     const [ isSidePanelOpen, setIsSidePanelOpen ] = useState(false)
     const [ isModalOpen, setIsModalOpen ] = useState(false)
     const [ selectedUserId, setSelectedUserId ] = useState(new Set()) // Initialized as Set
     const [ project, setProject ] = useState(location.state.project)
-    const [ message, setMessage ] = useState('')
-    const { user } = useContext(UserContext)
-   const messageBox = useRef(null)
+    const [ message, setMessage ] = useState('');
+    const { user} = useContext(UserContext);
+    const messageBox = React.createRef();
 
-    const [ users, setUsers ] = useState([])
+    const [ users, setUsers ] = useState([]);
     const [ messages, setMessages ] = useState([]) // New state variable for messages
     const [ fileTree, setFileTree ] = useState({})
 
     const [ currentFile, setCurrentFile ] = useState(null)
     const [ openFiles, setOpenFiles ] = useState([])
 
-    const [ webContainer, setWebContainer ] = useState(null)
-    const webContainerRef = useRef(null)
-    const [ iframeUrl, setIframeUrl ] = useState(null)
+    const [webContainer, setWebContainer] = useState(null)
+    const [iframeUrl, setIframeUrl] = useState(null)
 
-    const [ runProcess, setRunProcess ] = useState(null)
+    const [runProcess, setRunProcess] = useState(null)
 
     const handleUserClick = (id) => {
         setSelectedUserId(prevSelectedUserId => {
@@ -64,7 +60,6 @@ const Project = () => {
 
     }
 
-
     function addCollaborators() {
 
         axios.put("/projects/add-user", {
@@ -80,23 +75,35 @@ const Project = () => {
 
     }
 
-    const send = () => {
-
+    function send() {
         sendMessage('project-message', {
-            message,
+            message, 
             sender: user
         })
+        
         setMessages(prevMessages => [ ...prevMessages, { sender: user, message } ]) // Update messages state
+
         setMessage("")
 
     }
 
-   function WriteAiMessage(message) {
-    try {
-        const messageObject = JSON.parse(message)
+    function WriteAiMessage(message) {
+
+        // const messageObject = JSON.parse(message)
+        let messageObject;
+
+        try {
+            messageObject = JSON.parse(message);
+        } catch (err) {
+            console.log("Invalid JSON:", message);
+
+            messageObject = { text: message };
+        }
 
         return (
-            <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+            <div
+                className='overflow-auto bg-slate-950 text-white rounded-sm p-2'
+            >
                 <Markdown
                     children={messageObject.text}
                     options={{
@@ -105,58 +112,47 @@ const Project = () => {
                         },
                     }}
                 />
-            </div>
-        )
-    } catch (err) {
-        return <p>Invalid AI response</p>
+            </div>)
     }
-}
 
-    useEffect(() => {
+     useEffect(() => {
 
-        initializeSocket(project._id)
+        initializeSocket(project._id);
 
-        if (!webContainerRef.current) {
+        if(!webContainer){
             getWebContainer().then(container => {
-                setWebContainer(container)
-                webContainerRef.current = container
+                setWebContainer(container);
                 console.log("container started")
-
-                // Register server-ready listener ONCE when container boots
-                container.on('server-ready', (port, url) => {
-                    console.log('server-ready', port, url)
-                    setIframeUrl(url)
-                })
             })
         }
 
-
         receiveMessage('project-message', data => {
-
-            console.log(data)
             
-            if (data.sender._id == 'ai') {
+            let message = {};
 
+            // 👉 Sirf AI message parse karo
+            if (data.sender._id === 'ai') {
+                try {
+                    message = JSON.parse(data.message);
+                } catch (err) {
+                    console.log("AI JSON error");
+                }
 
-                const message = JSON.parse(data.message)
-
+                
                 console.log(message)
 
-                webContainerRef.current?.mount(message.fileTree)
+                
 
                 if (message.fileTree) {
-                    setFileTree(message.fileTree || {})
+                    webContainer?.mount(message.fileTree)
+                    setFileTree(message.fileTree);
                 }
-                setMessages(prevMessages => [ ...prevMessages, data ]) // Update messages state
-            } else {
-
-
-                setMessages(prevMessages => [ ...prevMessages, data ]) // Update messages state
             }
-        })
 
+            setMessages(prev => [...prev, data]);
+            })
 
-        axios.get(`/projects/get-project/${location.state.project._id}`).then(res => {
+         axios.get(`/projects/get-project/${location.state.project._id}`).then(res => {
 
             console.log(res.data.project)
 
@@ -176,7 +172,7 @@ const Project = () => {
 
     }, [])
 
-    function saveFileTree(ft) {
+        function saveFileTree(ft) {
         axios.put('/projects/update-file-tree', {
             projectId: project._id,
             fileTree: ft
@@ -187,15 +183,12 @@ const Project = () => {
         })
     }
 
-
-    // Removed appendIncomingMessage and appendOutgoingMessage functions
-
     function scrollToBottom() {
         messageBox.current.scrollTop = messageBox.current.scrollHeight
     }
-
-    return (
-        <main className='h-screen w-screen flex'>
+    
+  return (
+    <main className='h-screen w-screen flex'>
             <section className="left relative flex flex-col h-screen min-w-96 bg-slate-300">
                 <header className='flex justify-between items-center p-2 px-4 w-full bg-slate-100 absolute z-10 top-0'>
                     <button className='flex gap-2' onClick={() => setIsModalOpen(true)}>
@@ -206,22 +199,33 @@ const Project = () => {
                         <i className="ri-group-fill"></i>
                     </button>
                 </header>
-                <div className="conversation-area pt-14 pb-10 flex-grow flex flex-col h-full relative">
+                <div className=" conversation-area pt-14 pb-10 flex-grow flex flex-col h-full relative">
 
-                    <div
+                    <div 
                         ref={messageBox}
-                        className="message-box p-1 flex-grow flex flex-col gap-1 overflow-auto max-h-full scrollbar-hide">
+                        className="message-box p-1 flex-grow flex flex-col gap-1 overflow-auto max-h-full"
+                        >
                         {messages.map((msg, index) => (
-                            <div key={index} className={`${msg.sender._id === 'ai' ? 'max-w-80' : 'max-w-52'} ${msg.sender._id == user._id.toString() && 'ml-auto'}  message flex flex-col p-2 bg-slate-50 w-fit rounded-md`}>
-                                <small className='opacity-65 text-xs'>{msg.sender.email}</small>
-                                <div className='text-sm'>
-                                    {msg.sender._id === 'ai' ?
-                                        WriteAiMessage(msg.message)
-                                        : <p>{msg.message}</p>}
-                                </div>
+                            <div 
+                            key={index}
+                            className={`
+                                ${msg.sender._id === 'ai' ? 'max-w-80' : 'max-w-52'}
+                                ${msg.sender._id == user._id.toString() && 'ml-auto'}
+                                flex flex-col p-2 bg-slate-50 w-fit rounded-md
+                            `}
+                            >
+                            <small className="opacity-65 text-xs">
+                                {msg.sender.email || "AI"}
+                            </small>
+
+                            <div className="text-sm">
+                                {msg.sender._id === 'ai' ? WriteAiMessage(msg.message)
+                                 : <p>{msg.message}</p>}
+                            </div>
+
                             </div>
                         ))}
-                    </div>
+                        </div>
 
                     <div className="inputField w-full flex absolute bottom-0">
                         <input
@@ -247,8 +251,6 @@ const Project = () => {
                     <div className="users flex flex-col gap-2">
 
                         {project.users && project.users.map(user => {
-
-
                             return (
                                 <div className="user cursor-pointer hover:bg-slate-200 p-2 flex gap-2 items-center">
                                     <div className='aspect-square rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600'>
@@ -257,15 +259,12 @@ const Project = () => {
                                     <h1 className='font-semibold text-lg'>{user.email}</h1>
                                 </div>
                             )
-
-
                         })}
                     </div>
                 </div>
             </section>
 
-            <section className="right  bg-red-50 flex-grow h-full flex">
-
+            <section className="right bg-red-50 flex-grow h-full">
                 <div className="explorer h-full max-w-64 min-w-52 bg-slate-200">
                     <div className="file-tree w-full">
                         {
@@ -284,9 +283,8 @@ const Project = () => {
 
                         }
                     </div>
-
+                    
                 </div>
-
 
                 <div className="code-editor flex flex-col flex-grow h-full shrink">
 
@@ -309,56 +307,49 @@ const Project = () => {
 
                         <div className="actions flex gap-2">
                             <button
-                                onClick={async () => {
-                                    const container = webContainerRef.current
-                                    if (!container) {
-                                        console.error("WebContainer not ready yet")
-                                        return
-                                    }
+                                onClick={async() => {
+                                    
+                                    await webContainer?.mount(fileTree) 
 
-                                    console.log("Mounting file tree...")
-                                    await container.mount(fileTree)
+                                    const installProcess = await webContainer.spawn("npm", [ "install" ])
 
-                                    console.log("Running npm install...")
-                                    const installProcess = await container.spawn("npm", [ "install" ])
-
-                                    // MUST consume output or the process will deadlock
                                     installProcess.output.pipeTo(new WritableStream({
                                         write(chunk) {
-                                            console.log("[install]", chunk)
+                                            console.log(chunk)
                                         }
                                     }))
-
-                                    // Wait for npm install to complete before starting the server
-                                    const installExitCode = await installProcess.exit;
-
-                                    console.log("npm install finished with exit code:", installExitCode)
 
                                     if (runProcess) {
                                         runProcess.kill()
                                     }
 
-                                    console.log("Starting server...")
-                                    let tempRunProcess = await container.spawn("npm", [ "start" ]);
+                                    let tempRunProcess = await webContainer.spawn("npm", [ "start" ]);
 
                                     tempRunProcess.output.pipeTo(new WritableStream({
                                         write(chunk) {
-                                            console.log("[server]", chunk)
+                                            console.log(chunk)
                                         }
                                     }))
 
                                     setRunProcess(tempRunProcess)
 
+                                    webContainer.on('server-ready', (port, url) => {
+                                        console.log(port, url);
+                                        setIframeUrl(url);
+                                    })
+
                                 }}
                                 className='p-2 px-4 bg-slate-300 text-white'
                             >
-                                run
+                                ls
                             </button>
-
-
                         </div>
+                    
+
                     </div>
-                    <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
+                </div> 
+
+                <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
                         {
                             fileTree[ currentFile ] && (
                                 <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-50">
@@ -379,9 +370,15 @@ const Project = () => {
                                                     }
                                                 }
                                                 setFileTree(ft)
-                                                saveFileTree(ft)
+                                                // saveFileTree(ft)
                                             }}
-                                            dangerouslySetInnerHTML={{ __html: hljs.highlight('javascript', fileTree[ currentFile ].file.contents).value }}
+                                            // dangerouslySetInnerHTML={{ __html: hljs.highlight('javascript', fileTree[ currentFile ].file.contents).value }}
+                                            dangerouslySetInnerHTML={{
+                                                                    __html: hljs.highlight(
+                                                                        fileTree[currentFile].file.contents,
+                                                                        { language: 'javascript' }
+                                                                    ).value
+                                                                    }}
                                             style={{
                                                 whiteSpace: 'pre-wrap',
                                                 paddingBottom: '25rem',
@@ -392,23 +389,22 @@ const Project = () => {
                                 </div>
                             )
                         }
-                    </div>
+                    </div>   
 
-                </div>
-
-                {iframeUrl && webContainer &&
-                    (<div className="flex min-w-96 flex-col h-full">
-                        <div className="address-bar">
-                            <input type="text"
-                                onChange={(e) => setIframeUrl(e.target.value)}
-                                value={iframeUrl} className="w-full p-2 px-4 bg-slate-200" />
-                        </div>
-                        <iframe src={iframeUrl} className="w-full h-full"></iframe>
-                    </div>)
-                }
-
+                   {iframeUrl && webContainer &&
+                        (<div className="flex min-w-96 flex-col h-full">
+                            <div className="address-bar">
+                                <input type="text"
+                                    onChange={(e) => setIframeUrl(e.target.value)}
+                                    value={iframeUrl} className="w-full p-2 px-4 bg-slate-200" />
+                            </div>
+                            <iframe src={iframeUrl} className="w-full h-full"></iframe>
+                        </div>)
+                    }
+ 
 
             </section>
+
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -437,8 +433,9 @@ const Project = () => {
                     </div>
                 </div>
             )}
-        </main>
-    )
+    </main>
+    
+  )
 }
 
 export default Project
