@@ -10,7 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@webcontainer/api": "^1.6.1",
     "axios": "^1.14.0",
+    "highlight.js": "^11.11.1",
+    "markdown-to-jsx": "^9.7.13",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",
