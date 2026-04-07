@@ -108,7 +108,18 @@ const Project = () => {
             </div>
         )
     } catch (err) {
-        return <p>Invalid AI response</p>
+        return (
+            <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+                <Markdown
+                    children={message}
+                    options={{
+                        overrides: {
+                            code: SyntaxHighlightedCode,
+                        },
+                    }}
+                />
+            </div>
+        )
     }
 }
 
@@ -137,16 +148,21 @@ const Project = () => {
             
             if (data.sender._id == 'ai') {
 
-
-                const message = JSON.parse(data.message)
+                let message;
+                try {
+                    message = JSON.parse(data.message);
+                } catch (e) {
+                    message = { text: data.message };
+                }
 
                 console.log(message)
 
-                webContainerRef.current?.mount(message.fileTree)
-
                 if (message.fileTree) {
+                    webContainerRef.current?.mount(message.fileTree)
                     setFileTree(message.fileTree || {})
                 }
+                
+                // If it wasn't JSON, we stringify it now so WriteAiMessage behaves correctly or WriteAiMessage will gracefully fall back
                 setMessages(prevMessages => [ ...prevMessages, data ]) // Update messages state
             } else {
 
