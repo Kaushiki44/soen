@@ -86,42 +86,36 @@ const Project = () => {
             message,
             sender: user
         })
-        setMessages(prevMessages => [ ...prevMessages, { sender: user, message } ]) // Update messages state
+        setMessages(prevMessages => [ ...prevMessages, { sender: user, message, timestamp: new Date() } ])
         setMessage("")
 
     }
 
    function WriteAiMessage(message) {
+    const renderMarkdown = (text) => (
+        <Markdown
+            children={text}
+            options={{ overrides: { code: SyntaxHighlightedCode } }}
+        />
+    )
     try {
         const messageObject = JSON.parse(message)
-
-        return (
-            <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
-                <Markdown
-                    children={messageObject.text}
-                    options={{
-                        overrides: {
-                            code: SyntaxHighlightedCode,
-                        },
-                    }}
-                />
-            </div>
-        )
+        return renderMarkdown(messageObject.text)
     } catch (err) {
-        return (
-            <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
-                <Markdown
-                    children={message}
-                    options={{
-                        overrides: {
-                            code: SyntaxHighlightedCode,
-                        },
-                    }}
-                />
-            </div>
-        )
+        return renderMarkdown(message)
     }
 }
+
+    function formatTime(ts) {
+        if (!ts) return ''
+        const d = new Date(ts)
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+
+    function getInitials(email) {
+        if (!email) return '?'
+        return email.charAt(0).toUpperCase()
+    }
 
     useEffect(() => {
 
@@ -145,7 +139,7 @@ const Project = () => {
         receiveMessage('project-message', data => {
 
             console.log(data)
-            
+
             if (data.sender._id == 'ai') {
 
                 let message;
@@ -161,13 +155,11 @@ const Project = () => {
                     webContainerRef.current?.mount(message.fileTree)
                     setFileTree(message.fileTree || {})
                 }
-                
-                // If it wasn't JSON, we stringify it now so WriteAiMessage behaves correctly or WriteAiMessage will gracefully fall back
-                setMessages(prevMessages => [ ...prevMessages, data ]) // Update messages state
+
+                setMessages(prevMessages => [ ...prevMessages, { ...data, timestamp: new Date() } ])
             } else {
 
-
-                setMessages(prevMessages => [ ...prevMessages, data ]) // Update messages state
+                setMessages(prevMessages => [ ...prevMessages, { ...data, timestamp: new Date() } ])
             }
         })
 
@@ -211,120 +203,256 @@ const Project = () => {
     }
 
     return (
-        <main className='h-screen w-screen flex'>
-            <section className="left relative flex flex-col h-screen min-w-96 bg-slate-300">
-                <header className='flex justify-between items-center p-2 px-4 w-full bg-slate-100 absolute z-10 top-0'>
-                    <button className='flex gap-2' onClick={() => setIsModalOpen(true)}>
-                        <i className="ri-add-fill mr-1"></i>
-                        <p>Add collaborator</p>
+        <main className='h-screen w-screen flex flex-col bg-gray-950 text-gray-100 font-sans overflow-hidden'>
+
+            {/* ── TOP NAVBAR ───────────────────────────────────────────── */}
+            <nav className='flex-shrink-0 flex items-center justify-between px-5 h-12 bg-gray-900/95 backdrop-blur-md border-b border-indigo-900/30 z-30 relative'>
+
+                {/* Left — brand */}
+                <div className='flex items-center gap-3'>
+                    <div className='flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md shadow-indigo-900/40'>
+                        <i className="ri-code-s-slash-fill text-white text-sm"></i>
+                    </div>
+                    <span className='text-sm font-bold tracking-tight'>
+                        <span className='bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent'>CodeSync</span>
+                        <span className='text-gray-200'> AI</span>
+                    </span>
+                    <span className='hidden sm:block w-px h-4 bg-indigo-900/60 mx-1'></span>
+                    <span className='hidden sm:block text-xs text-gray-500 font-medium truncate max-w-[160px]'>{project.name}</span>
+                </div>
+
+                {/* Center — status pill */}
+                <div className='absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800/70 border border-indigo-900/30 text-[11px] text-gray-400'>
+                    <span className='w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399]'></span>
+                    Connected
+                </div>
+
+                {/* Right — actions */}
+                <div className='flex items-center gap-2'>
+                    <button
+                        id="navbar-share-btn"
+                        className='hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-800/60 rounded-lg transition-all duration-200'
+                    >
+                        <i className="ri-share-line"></i>
+                        Share
                     </button>
-                    <button onClick={() => setIsSidePanelOpen(!isSidePanelOpen)} className='p-2'>
-                        <i className="ri-group-fill"></i>
+                    <button
+                        id="navbar-settings-btn"
+                        className='p-2 rounded-lg text-gray-400 hover:text-indigo-300 hover:bg-indigo-950/50 transition-all duration-200'
+                        title="Settings"
+                    >
+                        <i className="ri-settings-3-line text-sm"></i>
+                    </button>
+                    <div className='w-7 h-7 rounded-full flex items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-700 text-white text-xs font-bold shadow-md cursor-pointer' title={user?.email}>
+                        {getInitials(user?.email)}
+                    </div>
+                </div>
+            </nav>
+
+            {/* ── CONTENT ROW (sidebar + editor) ───────────────────────── */}
+            <div className='flex flex-1 min-h-0'>
+
+            {/* ── LEFT SIDEBAR ─────────────────────────────────────────── */}
+            <section className="left relative flex flex-col h-full min-w-96 bg-gray-900 border-r border-indigo-900/30 shadow-2xl">
+
+                {/* Header */}
+                <header className='flex justify-between items-center px-4 py-3 w-full bg-gray-900/95 backdrop-blur-md border-b border-indigo-900/30 absolute z-10 top-0'>
+                    <button
+                        id="add-collaborator-btn"
+                        onClick={() => setIsModalOpen(true)}
+                        className='flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-300 bg-indigo-950/60 border border-indigo-700/50 rounded-lg hover:bg-indigo-800/40 hover:border-indigo-500 hover:text-indigo-100 transition-all duration-200'
+                    >
+                        <i className="ri-add-fill text-sm"></i>
+                        Add Collaborator
+                    </button>
+                    <button
+                        id="toggle-sidepanel-btn"
+                        onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+                        className='p-2 rounded-lg text-gray-400 hover:text-indigo-300 hover:bg-indigo-950/50 transition-all duration-200'
+                    >
+                        <i className="ri-group-fill text-lg"></i>
                     </button>
                 </header>
-                <div className="conversation-area pt-14 pb-10 flex-grow flex flex-col h-full relative">
 
+                {/* Chat / Conversation Area */}
+                <div className="conversation-area pt-14 pb-14 flex-grow flex flex-col h-full relative overflow-hidden">
                     <div
                         ref={messageBox}
-                        className="message-box p-1 flex-grow flex flex-col gap-1 overflow-auto max-h-full scrollbar-hide">
-                        {messages.map((msg, index) => (
-                            <div key={index} className={`${msg.sender._id === 'ai' ? 'max-w-80' : 'max-w-52'} ${msg.sender._id == user._id.toString() && 'ml-auto'}  message flex flex-col p-2 bg-slate-50 w-fit rounded-md`}>
-                                <small className='opacity-65 text-xs'>{msg.sender.email}</small>
-                                <div className='text-sm'>
-                                    {msg.sender._id === 'ai' ?
-                                        WriteAiMessage(msg.message)
-                                        : <p>{msg.message}</p>}
+                        className="message-box p-3 flex-grow flex flex-col gap-3 overflow-auto max-h-full scrollbar-hide"
+                    >
+                        {messages.map((msg, index) => {
+                            const isAI    = msg.sender._id === 'ai'
+                            const isOwn   = msg.sender._id === user._id.toString()
+                            const initials = getInitials(msg.sender.email)
+
+                            return (
+                                <div
+                                    key={index}
+                                    className={`flex items-end gap-2 ${ isOwn ? 'flex-row-reverse' : 'flex-row' } ${ isAI ? 'w-full' : '' }`}
+                                >
+                                    {/* Avatar */}
+                                    { !isOwn && (
+                                        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold
+                                            ${ isAI
+                                                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-900/40'
+                                                : 'bg-gray-700 text-gray-300'
+                                            }`}
+                                        >
+                                            { isAI ? <i className="ri-sparkling-fill text-xs"></i> : initials }
+                                        </div>
+                                    )}
+
+                                    {/* Bubble */}
+                                    <div className={`
+                                        flex flex-col gap-1
+                                        ${ isAI ? 'w-full max-w-full' : isOwn ? 'max-w-[72%]' : 'max-w-[72%]' }
+                                        ${ isOwn ? 'msg-animate-right items-end' : 'msg-animate-left items-start' }
+                                    `}>
+
+                                        {/* Sender label */}
+                                        <span className={`text-[10px] font-semibold tracking-wider uppercase px-1
+                                            ${ isAI ? 'text-indigo-400' : isOwn ? 'text-purple-400' : 'text-gray-500' }`}
+                                        >
+                                            { isAI ? '✦ AI Assistant' : isOwn ? 'You' : msg.sender.email }
+                                        </span>
+
+                                        {/* Message content */}
+                                        { isAI ? (
+                                            <div className="msg-ai-glow w-full rounded-xl border-l-2 border-indigo-500 bg-gray-900/80 border border-indigo-800/30 p-3 text-sm text-indigo-100 overflow-auto">
+                                                {WriteAiMessage(msg.message)}
+                                            </div>
+                                        ) : (
+                                            <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm
+                                                ${ isOwn
+                                                    ? 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white rounded-tr-sm shadow-indigo-900/30'
+                                                    : 'bg-gray-800 text-gray-200 border border-gray-700/50 rounded-tl-sm'
+                                                }`}
+                                            >
+                                                {msg.message}
+                                            </div>
+                                        )}
+
+                                        {/* Timestamp */}
+                                        <span className="text-[10px] text-gray-600 px-1">
+                                            {formatTime(msg.timestamp)}
+                                        </span>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+
+                    {/* Input Field */}
+                    <div className="inputField w-full flex absolute bottom-0 border-t border-indigo-900/30 bg-gray-900/95 backdrop-blur-sm">
+                        <input
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && send()}
+                            className='p-3 px-4 bg-transparent border-none outline-none flex-grow text-sm text-gray-200 placeholder-gray-600'
+                            type="text"
+                            placeholder='Message the AI or team…'
+                        />
+                        <button
+                            id="send-message-btn"
+                            onClick={send}
+                            className='px-4 text-indigo-400 hover:text-indigo-200 hover:bg-indigo-900/40 transition-all duration-200'
+                        >
+                            <i className="ri-send-plane-fill text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Side Panel – Collaborators */}
+                <div className={`sidePanel w-full h-full flex flex-col bg-gray-900/98 border-r border-indigo-900/30 absolute transition-transform duration-300 ease-in-out ${isSidePanelOpen ? 'translate-x-0' : '-translate-x-full'} top-0 z-20`}>
+                    <header className='flex justify-between items-center px-4 py-3 border-b border-indigo-900/30 bg-gray-900/95 backdrop-blur-md'>
+                        <div className='flex items-center gap-2'>
+                            <div className='w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_6px_#818cf8] animate-pulse'></div>
+                            <h1 className='font-semibold text-sm tracking-widest text-gray-200 uppercase'>Collaborators</h1>
+                        </div>
+                        <button
+                            id="close-sidepanel-btn"
+                            onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+                            className='p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition-all duration-200'
+                        >
+                            <i className="ri-close-fill text-lg"></i>
+                        </button>
+                    </header>
+
+                    <div className="users flex flex-col gap-1 p-3 overflow-y-auto">
+                        {project.users && project.users.map((user, index) => (
+                            <div
+                                key={index}
+                                className="user cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-indigo-950/50 hover:border-indigo-700/30 border border-transparent transition-all duration-200 group"
+                            >
+                                <div className='relative aspect-square w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-indigo-700 to-purple-800 text-white text-sm shadow-md flex-shrink-0'>
+                                    <i className="ri-user-fill"></i>
+                                    <span className='absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-gray-900'></span>
+                                </div>
+                                <div className='flex flex-col min-w-0'>
+                                    <span className='text-xs font-medium text-gray-300 truncate group-hover:text-indigo-200 transition-colors'>{user.email}</span>
+                                    <span className='text-[10px] text-gray-600'>Member</span>
                                 </div>
                             </div>
                         ))}
                     </div>
-
-                    <div className="inputField w-full flex absolute bottom-0">
-                        <input
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            className='p-2 px-4 border-none outline-none flex-grow' type="text" placeholder='Enter message' />
-                        <button
-                            onClick={send}
-                            className='px-5 bg-slate-950 text-white'><i className="ri-send-plane-fill"></i></button>
-                    </div>
-                </div>
-                <div className={`sidePanel w-full h-full flex flex-col gap-2 bg-slate-50 absolute transition-all ${isSidePanelOpen ? 'translate-x-0' : '-translate-x-full'} top-0`}>
-                    <header className='flex justify-between items-center px-4 p-2 bg-slate-200'>
-
-                        <h1
-                            className='font-semibold text-lg'
-                        >Collaborators</h1>
-
-                        <button onClick={() => setIsSidePanelOpen(!isSidePanelOpen)} className='p-2'>
-                            <i className="ri-close-fill"></i>
-                        </button>
-                    </header>
-                    <div className="users flex flex-col gap-2">
-
-                        {project.users && project.users.map(user => {
-
-
-                            return (
-                                <div className="user cursor-pointer hover:bg-slate-200 p-2 flex gap-2 items-center">
-                                    <div className='aspect-square rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600'>
-                                        <i className="ri-user-fill absolute"></i>
-                                    </div>
-                                    <h1 className='font-semibold text-lg'>{user.email}</h1>
-                                </div>
-                            )
-
-
-                        })}
-                    </div>
                 </div>
             </section>
 
-            <section className="right  bg-red-50 flex-grow h-full flex">
+            {/* ── RIGHT PANEL ──────────────────────────────────────────── */}
+            <section className="right flex-grow h-full flex bg-gray-950 min-h-0">
 
-                <div className="explorer h-full max-w-64 min-w-52 bg-slate-200">
-                    <div className="file-tree w-full">
-                        {
-                            Object.keys(fileTree).map((file, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => {
-                                        setCurrentFile(file)
-                                        setOpenFiles([ ...new Set([ ...openFiles, file ]) ])
-                                    }}
-                                    className="tree-element cursor-pointer p-2 px-4 flex items-center gap-2 bg-slate-300 w-full">
-                                    <p
-                                        className='font-semibold text-lg'
-                                    >{file}</p>
-                                </button>))
-
-                        }
+                {/* File Explorer */}
+                <div className="explorer h-full max-w-60 min-w-48 bg-gray-900/70 border-r border-indigo-900/20 flex flex-col">
+                    <div className='px-4 py-2.5 border-b border-indigo-900/20'>
+                        <p className='text-[10px] font-semibold tracking-widest text-gray-500 uppercase'>Explorer</p>
                     </div>
-
+                    <div className="file-tree w-full flex flex-col gap-0.5 p-2 overflow-y-auto">
+                        {Object.keys(fileTree).map((file, index) => (
+                            <button
+                                key={index}
+                                onClick={() => {
+                                    setCurrentFile(file)
+                                    setOpenFiles([ ...new Set([ ...openFiles, file ]) ])
+                                }}
+                                className={`tree-element w-full text-left cursor-pointer flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-all duration-150
+                                    ${currentFile === file
+                                        ? 'bg-indigo-900/50 text-indigo-200 border border-indigo-700/40'
+                                        : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                                    }`
+                                }
+                            >
+                                <i className="ri-file-code-line text-xs text-indigo-500/70"></i>
+                                <span className='font-medium truncate'>{file}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-
+                {/* Code Editor */}
                 <div className="code-editor flex flex-col flex-grow h-full shrink">
 
-                    <div className="top flex justify-between w-full">
-
-                        <div className="files flex">
-                            {
-                                openFiles.map((file, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => setCurrentFile(file)}
-                                        className={`open-file cursor-pointer p-2 px-4 flex items-center w-fit gap-2 bg-slate-300 ${currentFile === file ? 'bg-slate-400' : ''}`}>
-                                        <p
-                                            className='font-semibold text-lg'
-                                        >{file}</p>
-                                    </button>
-                                ))
-                            }
+                    {/* Tab Bar */}
+                    <div className="top flex justify-between w-full bg-gray-900/80 border-b border-indigo-900/20">
+                        <div className="files flex overflow-x-auto scrollbar-hide">
+                            {openFiles.map((file, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setCurrentFile(file)}
+                                    className={`open-file cursor-pointer flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-r border-indigo-900/20 transition-all duration-150
+                                        ${currentFile === file
+                                            ? 'bg-gray-950 text-indigo-300 border-t-2 border-t-indigo-500'
+                                            : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
+                                        }`
+                                    }
+                                >
+                                    <i className="ri-file-code-line text-indigo-600/60"></i>
+                                    {file}
+                                </button>
+                            ))}
                         </div>
-
-                        <div className="actions flex gap-2">
+                        <div className="actions flex items-center gap-2 px-3">
                             <button
+                                id="run-btn"
                                 onClick={async () => {
                                     const container = webContainerRef.current
                                     if (!container) {
@@ -338,16 +466,13 @@ const Project = () => {
                                     console.log("Running npm install...")
                                     const installProcess = await container.spawn("npm", [ "install" ])
 
-                                    // MUST consume output or the process will deadlock
                                     installProcess.output.pipeTo(new WritableStream({
                                         write(chunk) {
                                             console.log("[install]", chunk)
                                         }
                                     }))
 
-                                    // Wait for npm install to complete before starting the server
                                     const installExitCode = await installProcess.exit;
-
                                     console.log("npm install finished with exit code:", installExitCode)
 
                                     if (runProcess) {
@@ -364,92 +489,124 @@ const Project = () => {
                                     }))
 
                                     setRunProcess(tempRunProcess)
-
                                 }}
-                                className='p-2 px-4 bg-slate-300 text-white'
+                                className='flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-emerald-600/20 text-emerald-400 border border-emerald-700/40 rounded-lg hover:bg-emerald-600/30 hover:border-emerald-500 hover:text-emerald-300 transition-all duration-200'
                             >
-                                run
+                                <i className="ri-play-fill"></i>
+                                Run
                             </button>
-
-
                         </div>
                     </div>
-                    <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
-                        {
-                            fileTree[ currentFile ] && (
-                                <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-50">
-                                    <pre
-                                        className="hljs h-full">
-                                        <code
-                                            className="hljs h-full outline-none"
-                                            contentEditable
-                                            suppressContentEditableWarning
-                                            onBlur={(e) => {
-                                                const updatedContent = e.target.innerText;
-                                                const ft = {
-                                                    ...fileTree,
-                                                    [ currentFile ]: {
-                                                        file: {
-                                                            contents: updatedContent
-                                                        }
+
+                    {/* Editor Body */}
+                    <div className="bottom flex flex-grow max-w-full shrink overflow-auto bg-gray-950">
+                        {fileTree[ currentFile ] && (
+                            <div className="code-editor-area h-full overflow-auto flex-grow">
+                                <pre className="hljs h-full">
+                                    <code
+                                        className="hljs h-full outline-none"
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        onBlur={(e) => {
+                                            const updatedContent = e.target.innerText;
+                                            const ft = {
+                                                ...fileTree,
+                                                [ currentFile ]: {
+                                                    file: {
+                                                        contents: updatedContent
                                                     }
                                                 }
-                                                setFileTree(ft)
-                                                saveFileTree(ft)
-                                            }}
-                                            dangerouslySetInnerHTML={{ __html: hljs.highlight('javascript', fileTree[ currentFile ].file.contents).value }}
-                                            style={{
-                                                whiteSpace: 'pre-wrap',
-                                                paddingBottom: '25rem',
-                                                counterSet: 'line-numbering',
-                                            }}
-                                        />
-                                    </pre>
-                                </div>
-                            )
-                        }
+                                            }
+                                            setFileTree(ft)
+                                            saveFileTree(ft)
+                                        }}
+                                        dangerouslySetInnerHTML={{ __html: hljs.highlight('javascript', fileTree[ currentFile ].file.contents).value }}
+                                        style={{
+                                            whiteSpace: 'pre-wrap',
+                                            paddingBottom: '25rem',
+                                            counterSet: 'line-numbering',
+                                        }}
+                                    />
+                                </pre>
+                            </div>
+                        )}
                     </div>
-
                 </div>
 
-                {iframeUrl && webContainer &&
-                    (<div className="flex min-w-96 flex-col h-full">
-                        <div className="address-bar">
-                            <input type="text"
+                {/* Preview Iframe */}
+                {iframeUrl && webContainer && (
+                    <div className="flex min-w-96 flex-col h-full border-l border-indigo-900/20">
+                        <div className="address-bar bg-gray-900/80 border-b border-indigo-900/20">
+                            <input
+                                type="text"
                                 onChange={(e) => setIframeUrl(e.target.value)}
-                                value={iframeUrl} className="w-full p-2 px-4 bg-slate-200" />
+                                value={iframeUrl}
+                                className="w-full px-4 py-2 bg-gray-950/80 text-xs text-gray-400 border-none outline-none placeholder-gray-700"
+                            />
                         </div>
-                        <iframe src={iframeUrl} className="w-full h-full"></iframe>
-                    </div>)
-                }
-
+                        <iframe src={iframeUrl} className="w-full h-full bg-white"></iframe>
+                    </div>
+                )}
 
             </section>
 
+            </div> {/* end content row */}
+
+            {/* ── ADD COLLABORATOR MODAL ───────────────────────────────── */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-white p-4 rounded-md w-96 max-w-full relative">
-                        <header className='flex justify-between items-center mb-4'>
-                            <h2 className='text-xl font-semibold'>Select User</h2>
-                            <button onClick={() => setIsModalOpen(false)} className='p-2'>
-                                <i className="ri-close-fill"></i>
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-gray-900 border border-indigo-900/40 rounded-2xl shadow-2xl w-96 max-w-full relative overflow-hidden">
+                        {/* Glow accent */}
+                        <div className='absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500 to-transparent'></div>
+
+                        <header className='flex justify-between items-center px-5 py-4 border-b border-indigo-900/30'>
+                            <div className='flex items-center gap-2'>
+                                <i className="ri-user-add-fill text-indigo-400"></i>
+                                <h2 className='text-base font-semibold text-gray-100'>Add Collaborator</h2>
+                            </div>
+                            <button
+                                id="close-modal-btn"
+                                onClick={() => setIsModalOpen(false)}
+                                className='p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition-all duration-200'
+                            >
+                                <i className="ri-close-fill text-lg"></i>
                             </button>
                         </header>
-                        <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
+
+                        <div className="users-list flex flex-col gap-1 p-3 mb-16 max-h-80 overflow-y-auto">
                             {users.map(user => (
-                                <div key={user.id} className={`user cursor-pointer hover:bg-slate-200 ${Array.from(selectedUserId).indexOf(user._id) != -1 ? 'bg-slate-200' : ""} p-2 flex gap-2 items-center`} onClick={() => handleUserClick(user._id)}>
-                                    <div className='aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600'>
-                                        <i className="ri-user-fill absolute"></i>
+                                <div
+                                    key={user._id}
+                                    onClick={() => handleUserClick(user._id)}
+                                    className={`user cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all duration-150
+                                        ${Array.from(selectedUserId).indexOf(user._id) !== -1
+                                            ? 'bg-indigo-900/50 border-indigo-600/50 text-indigo-200'
+                                            : 'border-transparent hover:bg-gray-800/60 hover:border-gray-700/40 text-gray-400 hover:text-gray-200'
+                                        }`
+                                    }
+                                >
+                                    <div className='relative aspect-square w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-indigo-700 to-purple-800 text-white text-sm shadow-md flex-shrink-0'>
+                                        <i className="ri-user-fill"></i>
+                                        {Array.from(selectedUserId).indexOf(user._id) !== -1 && (
+                                            <span className='absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-indigo-500 border-2 border-gray-900 flex items-center justify-center'>
+                                                <i className="ri-check-fill text-[8px] text-white"></i>
+                                            </span>
+                                        )}
                                     </div>
-                                    <h1 className='font-semibold text-lg'>{user.email}</h1>
+                                    <span className='text-sm font-medium truncate'>{user.email}</span>
                                 </div>
                             ))}
                         </div>
-                        <button
-                            onClick={addCollaborators}
-                            className='absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-blue-600 text-white rounded-md'>
-                            Add Collaborators
-                        </button>
+
+                        <div className='absolute bottom-0 inset-x-0 p-4 bg-gray-900/95 border-t border-indigo-900/20 flex justify-center'>
+                            <button
+                                id="add-collaborators-confirm-btn"
+                                onClick={addCollaborators}
+                                className='px-6 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-900/40 transition-all duration-200'
+                            >
+                                Add Selected Collaborators
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
